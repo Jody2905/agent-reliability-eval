@@ -6,6 +6,8 @@ accounting is identical across them.
 
 from __future__ import annotations
 
+import inspect
+import json
 import os
 import time
 from dataclasses import dataclass, field
@@ -52,9 +54,13 @@ class Usage:
 
 @dataclass
 class Completion:
-    text: str
-    content: list[Any] = field(default_factory=list)  # raw content blocks (tool_use etc.) for agents
+    text: str  # all text blocks joined
+    content: list[dict] = field(default_factory=list)  # every content block as a dict, in order
     stop_reason: str | None = None
+
+    @property
+    def tool_calls(self) -> list[dict]:
+        return [b for b in self.content if b.get("type") == "tool_use"]
 
 
 class LLM:
@@ -66,6 +72,8 @@ class LLM:
       and report the spread.
     * Adaptive thinking is on by default. Thinking tokens count as output tokens
       (and cost), so max_tokens must leave room for thinking plus the answer.
+    * In a tool loop, thinking blocks must be passed back complete and unmodified.
+      `Completion.content` keeps every block, in order, for exactly that purpose.
     """
 
     def __init__(self, model: str = "claude-haiku-5-5", max_tokens: int = 8192):
@@ -76,32 +84,47 @@ class LLM:
         self.client = anthropic.AsyncAnthropic(max_retries=5)
         self.model, self.max_tokens = model, max_tokens
 
-    async def complete(self, system: str, messages: list[dict], usage: Usage, tools: list[dict] | None = None) -> Completion:
-        kwargs: dict[str, Any] = dict(
-            model=self.model, max_tokens=self.max_tokens, system=system, messages=messages,
-        )
+    async def complete(
+        self, system: str, messages: list[dict], usage: Usage,
+        tools: list[dict] | None = None, tool_choice: dict | None = None,
+    ) -> Completion:
+        kwargs: dict[str, Any] = dict(model=self.model, max_tokens=self.max_tokens, system=system, messages=messages)
         if tools:
             kwargs["tools"] = tools
+        if tool_choice:
+            kwargs["tool_choice"] = tool_choice
         start = time.perf_counter()
         response = await self.client.messages.create(**kwargs)
         usage.add(self.model, response.usage.input_tokens, response.usage.output_tokens, time.perf_counter() - start)
-        text = "".join(block.text for block in response.content if block.type == "text")
-        return Completion(text=text, content=list(response.content), stop_reason=response.stop_reason)
+        content = [block.model_dump(mode="json", exclude_none=True) for block in response.content]
+        text = "".join(b["text"] for b in content if b["type"] == "text")
+        return Completion(text=text, content=content, stop_reason=response.stop_reason)
 
 
 class FakeLLM:
     """Offline stand-in for tests and dry runs: no API key, no cost.
 
-    `respond` receives (system, messages) and returns the reply text.
+    `respond(system, messages, tools)` returns either reply text, or a list of
+    content blocks (dicts) - e.g. tool_use blocks to test agent loops.
     """
 
     model = "fake"
 
-    def __init__(self, respond: Callable[[str, list[dict]], str]):
+    def __init__(self, respond: Callable[..., str | list[dict]]):
         self.respond = respond
 
-    async def complete(self, system: str, messages: list[dict], usage: Usage, tools: list[dict] | None = None) -> Completion:
-        text = self.respond(system, messages)
-        prompt_chars = len(system) + sum(len(str(m["content"])) for m in messages)
-        usage.add(self.model, prompt_chars // 4, len(text) // 4, 0.0)  # rough token estimate
-        return Completion(text=text, stop_reason="end_turn")
+    async def complete(
+        self, system: str, messages: list[dict], usage: Usage,
+        tools: list[dict] | None = None, tool_choice: dict | None = None,
+    ) -> Completion:
+        offered = tools if (tool_choice or {}).get("type") != "none" else None
+        if len(inspect.signature(self.respond).parameters) >= 3:
+            reply = self.respond(system, messages, offered)
+        else:  # simple fakes take (system, messages)
+            reply = self.respond(system, messages)
+        content = [{"type": "text", "text": reply}] if isinstance(reply, str) else reply
+        text = "".join(b["text"] for b in content if b["type"] == "text")
+        stop = "tool_use" if any(b["type"] == "tool_use" for b in content) else "end_turn"
+        prompt_chars = len(system) + sum(len(json.dumps(m["content"], default=str)) for m in messages)
+        usage.add(self.model, prompt_chars // 4, len(json.dumps(content)) // 4, 0.0)  # rough token estimate
+        return Completion(text=text, content=content, stop_reason=stop)

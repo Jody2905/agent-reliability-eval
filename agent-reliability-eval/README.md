@@ -18,8 +18,9 @@ All three systems get their data from [cyber-intel-mcp](https://github.com/Jody2
 - [x] Question schema and 15 seed questions, all validated
 - [x] System 1: basic RAG
 - [x] Scoring pipeline and experiment runner
-- [ ] System 2: agent + tools
-- [ ] System 3: agent + verification
+- [x] System 2: agent + tools
+- [x] System 3: agent + verification
+- [ ] First real runs on the seed questions
 - [ ] Expand to 100–200 questions
 - [ ] Experiments, failure analysis, write-up
 
@@ -61,6 +62,8 @@ Copy `.env.example` to `.env` and paste your Anthropic API key after `ANTHROPIC_
 ```bash
 python -m reliability.run --system rag --fake          # dry run: fake model, no key, no cost
 python -m reliability.run --system rag                 # Claude Haiku 5.5
+python -m reliability.run --system agent
+python -m reliability.run --system agent_verify
 python -m reliability.run --system rag --ids q001 q009 # just some questions
 python -m reliability.scoring results/<file>.jsonl     # re-score a saved run
 ```
@@ -84,4 +87,18 @@ Each run saves every question's answer, citations, raw model reply, tool calls, 
 
 ## Systems
 
-- **`rag`**: BM25-searches the corpus with the question, fetches the top 8 records in full, and makes one model call. No tools, no loop.
+All three use the same model, the same answer format and citation rules, and the same MCP tools.
+
+| System | How it works | Model calls |
+|---|---|---|
+| `rag` | Code BM25-searches the corpus with the question, fetches the top 8 records in full, and makes one model call. No loop. | 1 |
+| `agent` | The model gets the five MCP tools and decides what to call, looping until it answers or uses its budget of 8 tool-call rounds. Then tools are switched off and it must answer. | 2+ |
+| `agent_verify` | The `agent`, plus two checks on its answer. **Mechanical** (code): valid JSON, citations present, every cited id exists. **Verifier** (a separate model call with no tools): do the cited records actually support every part of the answer? Problems go back to the agent, which revises with its tools (up to 2 revisions). | 3+ |
+
+Every run saves the agent's full transcript (tool calls, results and reasoning), and for `agent_verify` every draft answer and the verifier's objections. This is the raw material for the failure analysis.
+
+**Design notes**
+
+- The verifier only sees the records the agent cited, so it checks *support*, not truth. It catches answers from memory and answers backed by the wrong record. It cannot catch a well-supported answer to the wrong question.
+- Abstentions are not verified, since a verifier can't confirm that something is absent from the data. So verification can reduce hallucinations but not wrong abstentions.
+- All three systems are tested offline with scripted fake models (`tests/test_agents.py`), including a verifier catching the classic Zerologon "10.0 from memory" error.

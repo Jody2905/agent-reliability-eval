@@ -195,6 +195,11 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
                          "output": sum(r["usage"]["output_tokens"] for r in rows)},
         "mean_llm_calls": _mean(r["usage"]["llm_calls"] for r in rows),
         "mean_tool_calls": _mean(r["tool_calls"] for r in rows),
+        "budget_exhausted": sum(bool(r["prediction"].get("budget_exhausted")) for r in rows),
+        "mean_revisions": _mean(r["prediction"].get("revisions") for r in rows),
+        "revised_and_fixed": sum(
+            1 for r in rows if r["prediction"].get("revisions") and r["score"]["correct"]
+        ),
         "latency_p50_s": _percentile(seconds, 50),
         "latency_p95_s": _percentile(seconds, 95),
     }
@@ -214,6 +219,9 @@ def print_report(summary: dict[str, Any], rows: list[dict[str, Any]], title: str
           + ", ".join(f"{k} {v:.0%}" for k, v in s["by_category"].items()))
     print(f"Hallucination rate (unanswerable): {s['hallucination_rate']} | wrong abstentions: {s['wrong_abstention_rate']}")
     print(f"Citations: precision {s['citation_precision']}, recall {s['citation_recall']}, fabricated {s['fabricated_citations']}")
+    if s["mean_revisions"] is not None:
+        print(f"Verification: mean revisions {s['mean_revisions']}, revised and ended correct {s['revised_and_fixed']}")
+    print(f"Tool calls per question {s['mean_tool_calls']} | step budget hit {s['budget_exhausted']} times")
     print(f"Cost: total ${s['total_cost_usd']}, per correct answer ${s['cost_per_correct_usd']} | "
           f"latency p50 {s['latency_p50_s']}s, p95 {s['latency_p95_s']}s")
 

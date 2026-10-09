@@ -27,27 +27,10 @@ from cyber_intel_mcp.server import mcp
 from .common import parse_reply
 from .llm import LLM, FakeLLM, Usage
 from .scoring import print_report, score_answer, score_citations, summarize
+from .tools import Tools
 
 ROOT = Path(__file__).resolve().parents[1]
-SYSTEMS = ["rag"]  # "agent" and "agent_verify" get added here as they're built
-
-
-class Tools:
-    """Calls MCP tools on the cyber-intel server and counts the calls.
-
-    Tool errors are returned as {"error": ...} rather than raised, so an agent
-    sees the error message the same way it would from a real MCP client.
-    """
-
-    def __init__(self, client: Client):
-        self.client, self.calls, self.log = client, 0, []
-
-    async def __call__(self, name: str, **args):
-        self.calls += 1
-        result = await self.client.call_tool(name, args)
-        out = {"error": result.content[0].text} if result.is_error else result.structured_content
-        self.log.append({"tool": name, "args": args, "error": bool(result.is_error)})
-        return out
+SYSTEMS = ["rag", "agent", "agent_verify"]
 
 
 def fake_llm() -> FakeLLM:
