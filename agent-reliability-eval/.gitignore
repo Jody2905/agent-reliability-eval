@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Secrets - never commit API keys
+.env
+.env.*
+
+# Full data snapshots are large and reproducible with `cyber-intel-fetch`
+data/snapshot/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+results/

@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-reliability-eval"
+version = "0.1.0"
+description = "Comparing RAG, tool-using agents and verifying agents on multi-step cybersecurity research tasks"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Jody-Ann Trimmingham" }]
+dependencies = [
+    "cyber-intel-mcp @ git+https://github.com/Jody2905/cyber-intel-mcp.git",
+    "anthropic>=0.80",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["reliability", "dataset"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
