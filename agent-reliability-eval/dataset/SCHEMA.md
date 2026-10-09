@@ -6,6 +6,9 @@ Questions are stored as JSON Lines (`.jsonl`): one JSON object per line.
 |---|---|---|
 | `id` | string | `q001`, `q002`, … Stable; never reuse an id. |
 | `category` | string | `single_hop`, `multi_hop`, `comparison` or `unanswerable` (see below) |
+| `difficulty` | string | `easy`, `medium` or `hard`: how much searching, combining or reasoning the question needs |
+| `template` | string | Which template generated it (`dataset/templates.py`), or `seed` for the 15 hand-written questions |
+| `params` | object | The values the template was filled with. The reference solution uses only what is in the question. |
 | `question` | string | The exact text given to every system |
 | `answer_format` | string | Format instruction shown to every system with the question. Never reveals that a question is unanswerable. |
 | `answer_type` | string | How the answer is scored (see below) |
@@ -38,8 +41,13 @@ Questions are stored as JSON Lines (`.jsonl`): one JSON object per line.
 
 ## Writing new questions
 
-1. Add a function to `build_seed.py` that derives the gold answer from the snapshot.
-2. Add a reference solution with the same name to `validate.py`, using only MCP tools.
-3. Run `python dataset/build_seed.py` and then `python dataset/validate.py`. Both must pass.
+**More of an existing kind:** raise that template's `count` in `TEMPLATES` (`dataset/templates.py`).
+
+**A new kind:** add a `Template` subclass with three methods:
+- `candidates(store)`: every valid parameter set
+- `build(store, p)`: the question and its gold answer, derived from the data
+- `solve(tools, p)`: a reference solution using only MCP tools
+
+Then run `python dataset/build.py` followed by `python dataset/validate.py`. Both must pass.
 
 If a question's answer has to be computed by hand, rethink the question.

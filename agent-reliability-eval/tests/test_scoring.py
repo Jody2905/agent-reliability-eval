@@ -71,9 +71,12 @@ def test_citation_scores_and_fabrication():
     assert c["fabricated"] == ["cve:CVE-9999-0001"]
 
 
+FULL_SET = [json.loads(l) for l in (Path(__file__).parents[1] / "dataset" / "questions.jsonl").read_text().splitlines()]
+
+
 def test_gold_answers_score_perfectly():
     """Feeding back each gold answer and its sources must score 100% - dataset and scorer agree."""
-    for q in QUESTIONS.values():
+    for q in FULL_SET:
         assert score_answer(q, pred(q["gold_answer"], q["gold_source_ids"]))["correct"], q["id"]
         c = score_citations(q, pred(q["gold_answer"], q["gold_source_ids"]))
         assert c["fabricated"] == [] and c["citation_recall"] in (None, 1.0), q["id"]

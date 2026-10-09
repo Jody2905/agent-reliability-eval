@@ -297,15 +297,31 @@ def q015():
     )
 
 
+SEED_DIFFICULTY = {
+    "q001": "easy", "q002": "easy", "q003": "easy", "q004": "easy", "q005": "easy",
+    "q006": "medium", "q007": "medium", "q008": "medium", "q009": "hard",
+    "q010": "medium", "q011": "hard", "q012": "medium", "q013": "hard",
+    "q014": "medium", "q015": "hard",
+}
+
+
+def seed_items() -> list[dict]:
+    items = []
+    for n, fn in enumerate(QUESTIONS, start=1):
+        item = {"id": fn.__name__, "acceptable_answers": [], "notes": "", **fn()}
+        assert item["id"] == f"q{n:03d}", "question functions must be numbered in order"
+        item.update(difficulty=SEED_DIFFICULTY[item["id"]], template="seed", params={},
+                    snapshot=store.manifest["kev_catalog_version"])
+        items.append(item)
+    return items
+
+
 def main():
-    manifest = store.manifest
+    items = seed_items()
     with open(OUT, "w", encoding="utf-8") as f:
-        for n, fn in enumerate(QUESTIONS, start=1):
-            item = {"id": fn.__name__, "acceptable_answers": [], "notes": "", **fn()}
-            assert item["id"] == f"q{n:03d}", "question functions must be numbered in order"
-            item["snapshot"] = manifest["kev_catalog_version"]
+        for item in items:
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
-    print(f"Wrote {len(QUESTIONS)} questions to {OUT} (snapshot KEV {manifest['kev_catalog_version']})")
+    print(f"Wrote {len(items)} seed questions to {OUT}")
 
 
 if __name__ == "__main__":

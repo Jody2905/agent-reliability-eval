@@ -13,5 +13,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
+      - run: python dataset/build.py && git diff --exit-code dataset/   # dataset is reproducible
       - run: python dataset/validate.py
       - run: pytest -v

@@ -20,24 +20,34 @@ All three systems get their data from [cyber-intel-mcp](https://github.com/Jody2
 - [x] Scoring pipeline and experiment runner
 - [x] System 2: agent + tools
 - [x] System 3: agent + verification
-- [ ] First real runs on the seed questions
-- [ ] Expand to 100–200 questions
+- [x] Expand to 150 questions (23 templates + 15 seed questions)
+- [ ] First real runs
 - [ ] Experiments, failure analysis, write-up
 
 ## Dataset
 
-`dataset/seed_questions.jsonl` holds 15 questions across four categories:
+`dataset/questions.jsonl` holds **150 questions**:
 
-| Category | Count | Tests |
-|---|---|---|
-| single_hop | 5 | Looking up one fact |
-| multi_hop | 4 | Combining records, date arithmetic, search then lookup |
-| comparison | 4 | Counting and ranking across many records |
-| unanswerable | 2 | Saying "not available" instead of hallucinating |
+| Category | Easy | Medium | Hard | Total | Tests |
+|---|---|---|---|---|---|
+| single_hop | 40 | | | 40 | Looking up one fact |
+| multi_hop | | 27 | 13 | 40 | Combining records, date arithmetic, finding a CVE by name and then looking it up |
+| comparison | | 26 | 14 | 40 | Counting and ranking across many records |
+| unanswerable | | 21 | 9 | 30 | Saying "not available" instead of hallucinating |
 
-Several questions contain deliberate traps where an answer from a model's memory disagrees with the data. For example, most sources give Zerologon (CVE-2020-1472) a CVSS of 10.0, but the CVE record in the snapshot scores it 5.5.
+The first 15 are hand-written seed questions (`dataset/build_seed.py`). The other 135 come from **23 templates** (`dataset/templates.py`). Each template is one kind of question, filled in from the data with a fixed random seed, so rebuilding always gives the identical file.
 
-**Gold answers are computed from the snapshot by code** (`dataset/build_seed.py`), never typed by hand. **Every question is validated** (`dataset/validate.py`) by a scripted reference solution that must reach the gold answer using only the MCP tools. See `dataset/SCHEMA.md` for the field definitions and scoring rules.
+Several questions are deliberate traps where a model's memory disagrees with the data:
+- Zerologon (CVE-2020-1472) is 10.0 in most sources, but its CVE record scores it 5.5.
+- CVE-2021-3449 is widely listed as 5.9, but its CVE record carries no score at all.
+- Some unanswerable questions have a false premise, such as asking when a CVE that is not in KEV was added to KEV.
+
+**Every gold answer is computed from the data by code, never typed by hand. Every question is validated** by a reference solution that must reach the gold answer using only the MCP tools. Planted wrong answers are caught. See `dataset/SCHEMA.md` for field definitions and scoring rules.
+
+```bash
+python dataset/build.py      # regenerate questions.jsonl (identical output every time)
+python dataset/validate.py   # prove all 150 through the MCP tools
+```
 
 ## Setup
 
@@ -47,7 +57,7 @@ cd agent-reliability-eval
 python -m venv .venv
 # Windows: .venv\Scripts\activate     macOS/Linux: source .venv/bin/activate
 pip install -e ".[dev]"
-python dataset/validate.py     # expect: 15/15 questions valid
+python dataset/validate.py     # expect: 150/150 questions valid
 pytest                         # offline tests, no API key needed
 ```
 
@@ -65,8 +75,11 @@ python -m reliability.run --system rag                 # Claude Haiku 5.5
 python -m reliability.run --system agent
 python -m reliability.run --system agent_verify
 python -m reliability.run --system rag --ids q001 q009 # just some questions
+python -m reliability.run --system rag --questions dataset/seed_questions.jsonl  # the 15 seed questions only
 python -m reliability.scoring results/<file>.jsonl     # re-score a saved run
 ```
+
+**Estimated cost with Claude Haiku 5.5:** about $1–2 for one pass of all three systems over the 150 questions, and roughly $5 for the recommended 3 repeats. This is estimated from prompt sizes; agent runs vary.
 
 Each run saves every question's answer, citations, raw model reply, tool calls, tokens, cost and time to `results/`, then prints a report.
 

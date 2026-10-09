@@ -70,7 +70,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--system", choices=SYSTEMS, required=True)
     parser.add_argument("--model", default="claude-haiku-5-5")
-    parser.add_argument("--questions", type=Path, default=ROOT / "dataset" / "seed_questions.jsonl")
+    parser.add_argument("--questions", type=Path, default=ROOT / "dataset" / "questions.jsonl")
     parser.add_argument("--ids", nargs="+", help="only run these question ids")
     parser.add_argument("--fake", action="store_true", help="offline dry run with a fake model")
     parser.add_argument("--out-dir", type=Path, default=ROOT / "results")

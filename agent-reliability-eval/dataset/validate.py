@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from collections import Counter
 from datetime import date
 from pathlib import Path
 
@@ -25,10 +26,15 @@ from mcp import Client
 
 from cyber_intel_mcp.server import mcp
 
-DEFAULT = Path(__file__).parent / "seed_questions.jsonl"
+sys.path.insert(0, str(Path(__file__).parent))
+from templates import TEMPLATES  # noqa: E402
+
+DEFAULT = Path(__file__).parent / "questions.jsonl"
 CATEGORIES = {"single_hop", "multi_hop", "comparison", "unanswerable"}
 ANSWER_TYPES = {"number", "date", "text", "boolean", "set", "multi", "abstain"}
+DIFFICULTIES = {"easy", "medium", "hard"}
 REQUIRED = {
+    "difficulty", "template", "params",
     "id", "category", "question", "answer_format", "answer_type", "gold_answer", "acceptable_answers",
     "gold_source_ids", "min_tool_calls", "tools_expected", "notes", "snapshot",
 }
@@ -127,6 +133,8 @@ def check_schema(item) -> list[str]:
     problems = [f"missing field {f}" for f in REQUIRED - item.keys()]
     if item.get("category") not in CATEGORIES:
         problems.append(f"bad category {item.get('category')}")
+    if item.get("difficulty") not in DIFFICULTIES:
+        problems.append(f"bad difficulty {item.get('difficulty')}")
     if item.get("answer_type") not in ANSWER_TYPES:
         problems.append(f"bad answer_type {item.get('answer_type')}")
     if item.get("category") == "unanswerable" and (item.get("answer_type") != "abstain" or item.get("gold_answer") is not None):
@@ -146,6 +154,10 @@ def same(gold, got) -> bool:
 
 async def main(path: Path) -> int:
     items = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    duplicates = [q for q, n in Counter(i["question"] for i in items).items() if n > 1]
+    if duplicates:
+        print(f"FAIL duplicate questions: {duplicates}")
+        return 1
     failures = 0
     async with Client(mcp) as client:
         for item in items:
@@ -154,7 +166,11 @@ async def main(path: Path) -> int:
                 r = await client.call_tool("get_source", {"source_id": sid})
                 if not r.structured_content["found"]:
                     problems.append(f"source {sid} not found")
-            solver = globals().get(item["id"])
+            if item.get("template", "seed") == "seed":
+                solver = globals().get(item["id"])
+            else:
+                template = TEMPLATES[item["template"]]
+                solver = lambda tools, t=template, p=item["params"]: t.solve(tools, p)  # noqa: E731
             if solver is None:
                 problems.append("no reference solution")
             else:
@@ -173,6 +189,8 @@ async def main(path: Path) -> int:
                 print(f"       - {p}")
             failures += bool(problems)
     print(f"\n{len(items) - failures}/{len(items)} questions valid")
+    by_cat = Counter(i["category"] for i in items)
+    print("by category: " + ", ".join(f"{c} {by_cat[c]}" for c in sorted(CATEGORIES) if by_cat[c]))
     return 1 if failures else 0
 
 

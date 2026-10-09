@@ -11,7 +11,7 @@ from reliability.systems import agent, agent_verify
 
 QUESTIONS = [
     json.loads(line)
-    for line in (Path(__file__).parents[1] / "dataset" / "seed_questions.jsonl").read_text().splitlines()
+    for line in (Path(__file__).parents[1] / "dataset" / "questions.jsonl").read_text().splitlines()
 ]
 BY_ID = {q["id"]: q for q in QUESTIONS}
 THINKING = {"type": "thinking", "thinking": "Let me look this up.", "signature": "sig-123"}
